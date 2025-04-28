@@ -28,9 +28,9 @@ def parse_args():
     parser.add_argument('--is_test', action="store_true", default=False, help='test or train')
     parser.add_argument('--device', type=str, default='cuda:0', help='device to use')
     parser.add_argument('--lr', type=float, default=0.001, help='generator learning rate')
-    parser.add_argument('--weight_decay', type=float, default=1e-4, help='weight decay')
+    parser.add_argument('--weight_decay', type=float, default=5e-4, help='weight decay')
     parser.add_argument('--loss_type', type=str, default='Fl', choices=['Fl', 'Bec', 'Nl'])
-    parser.add_argument('--alpha', type=float, default=[1, 5], help='Fl alpha')
+    parser.add_argument('--alpha', type=float, default=5, help='Fl alpha')
     parser.add_argument('--epochs', type=int, default=30, help='number of training epochs')
     parser.add_argument('--train_root', default=r'../data/error_detect_data/train', type=str,
                         help='path to train dataset')
@@ -46,37 +46,10 @@ args = parse_args()
 
 model_dict = {
     'GCN': GCN(),
-    'Pointnet': PointNet(),
+    'Pointnet': PointNet(),  # PointNet 使用Nl_loss
     'DGCNN': DGCNN(),
     'TED': TED(device=args.device)
 }
-
-
-class FocalLoss(nn.Module):
-    def __init__(self, gamma=0, alpha=10):
-        super(FocalLoss, self).__init__()
-        self.gamma = gamma
-        self.alpha = alpha
-
-    def forward(self, inputs, targets):
-        N, C = inputs.size()
-        # BCE_loss = F.cross_entropy(inputs, targets, reduction='none')
-        BCE_loss = F.binary_cross_entropy_with_logits(inputs, targets)
-        pt = torch.exp(-BCE_loss)
-        # print(inputs,targets,BCE_loss)
-
-        # alpha_t = torch.ones_like(pt).to(device=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-        # alpha_t[torch.argmax(targets,dim=1)==1] = self.alpha
-        alpha_t = 1
-        if targets[:, 1] == 1:
-            alpha_t = self.alpha
-        # print(alpha_t)
-        FL_loss = alpha_t * (1 - pt) ** self.gamma * BCE_loss
-        # print(FL_loss)
-        if FL_loss.mean().isnan():
-            print(BCE_loss)
-
-        return FL_loss.mean()
 
 
 class Trainer(object):
@@ -84,7 +57,6 @@ class Trainer(object):
         self.args = args
         self.args.device = torch.device(self.args.device if torch.cuda.is_available() else "cpu")
         self.model = model_dict[self.args.model_name].to(self.args.device)
-        self.criterion_foc = FocalLoss(gamma=0, alpha=5)
         print('model: ', args.model_name)
         if self.args.model_name == 'TED':
             dp_params = []
@@ -106,15 +78,18 @@ class Trainer(object):
                 # print(res_params)
             self.optimizer = torch.optim.Adam([
                 {'params': res_params, 'lr': args.lr},
-                {'params': dp_params, 'lr': 1e-4}], weight_decay=5e-4)
+                {'params': dp_params, 'lr': 1e-4}], weight_decay=self.args.weight_decay)
+            self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda=lambda epoch: 1 / (epoch + 1))
         else:
             self.optimizer = optim.Adam(self.model.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay)
-        self.scheduler = lr_scheduler.StepLR(self.optimizer, step_size=10, gamma=0.1)
+            self.scheduler = lr_scheduler.StepLR(self.optimizer, step_size=10, gamma=0.1)
+
         if not self.args.is_test:
             self.train_dataset = DetectDataset(self.args.train_root)
-            self.train_loader = DataLoader(self.train_dataset, batch_size=1, shuffle=False)
+            self.train_loader = DataLoader(self.train_dataset, batch_size=1, shuffle=True)
         self.test_dataset = DetectDataset(self.args.test_root)
         self.test_loader = DataLoader(self.test_dataset, batch_size=1, shuffle=False)
+
         if not self.args.is_test:
             self.save_root = os.path.join(self.args.save_dir, str(self.args.model_name),
                                           current_time.strftime("%Y-%m-%d-%H-%M"))
@@ -144,12 +119,7 @@ class Trainer(object):
                 adj = adj.to(self.args.device)
                 feat_sp = feat_sp.squeeze(dim=0).to(self.args.device)
                 output = self.model(feat_xyz, adj, feat_sp)
-                # print('feat_xyz: ', feat_xyz)
-                # print('output: ', output)
-                # print('label: ', label)
-                # exit(0)
-                # loss = self._calculate_loss(output, label, self.args.loss_type)
-                loss = self.criterion_foc(output, label)
+                loss = self._calculate_loss(output, label, self.args.loss_type)
                 if loss.isnan():
                     print('nan loss')
                     continue
@@ -157,7 +127,10 @@ class Trainer(object):
                 if mode == 'train':
                     iter += 1
                     loss.backward()
-                    if iter % 64 == 0:
+                    if iter % 64 == 0 and self.args.model_name == 'TED':
+                        self.optimizer.step()
+                        self.optimizer.zero_grad()
+                    elif self.args.model_name != 'TED':
                         self.optimizer.step()
                         self.optimizer.zero_grad()
 
@@ -184,6 +157,7 @@ class Trainer(object):
         best_recall = 0
         best_epoch = 0
         best_f1 = 0
+        best_loss = 1e10
         best_model = self.model
         for epoch in range(self.args.epochs):
             self.model.train()
@@ -193,15 +167,16 @@ class Trainer(object):
             with torch.no_grad():
                 valid_info = self.run_step(self.test_loader, epoch=epoch, mode='valid', best_recall=best_recall,
                                            best_precision=best_precision, best_f1=best_f1)
-            # train_metric = self.extract_metrics(train_info)
+            train_metric = self.extract_metrics(train_info)
             valid_metric = self.extract_metrics(valid_info)
             self._log_save(log=f"Train_{epoch + 1}: " + train_info)
             self._log_save(log=f"Valid_{epoch + 1}: " + valid_info + "\n")
-            if valid_metric['f1'] > best_f1:
+            if train_metric['loss'] < best_loss:
+                best_epoch = epoch
+                best_loss = train_metric['loss']
                 best_precision = valid_metric['precision']
                 best_recall = valid_metric['recall']
                 best_f1 = valid_metric['f1']
-                best_epoch = epoch
                 best_model = self.model.state_dict()
             if (epoch + 1) % 2 == 0:
                 save_path = os.path.join(self.save_root, 'checkpoint', 'epoch_' + str(epoch + 1) + '.pth')
@@ -209,7 +184,7 @@ class Trainer(object):
                 torch.save(self.model.state_dict(), save_path)
         best_model_save_path = os.path.join(self.save_root, 'checkpoint', 'best_epoch_' + str(best_epoch + 1) + '.pth')
         torch.save(best_model, best_model_save_path)
-        best_log = f"Best Model: Epoch {best_epoch + 1}, Best Precision: {best_precision:.4f}, Best_Recall: {best_recall}"
+        best_log = f"Best Model: Epoch {best_epoch + 1}, Best Precision: {best_precision:.4f}, Best_Recall: {best_recall}, Best F1: {best_f1}\n"
         self._log_save(log=best_log)
 
     def test(self, checkpoint_path):
@@ -222,17 +197,17 @@ class Trainer(object):
             # self._log_save(log=f"Test: " + test_info)
 
     def _calculate_loss(self, output, target: torch.Tensor, loss_fn='Fl') -> torch.Tensor:
-        def FocalLoss(pred, label, gamma, alpha=None) -> torch.Tensor:
-            # print('pred:', pred)
-            # print('label:', label)
-            BCE_loss = F.cross_entropy(pred, label, reduction='none')
+        def FocalLoss(pred, label, gamma=0, alpha=10) -> torch.Tensor:
+            BCE_loss = F.binary_cross_entropy_with_logits(pred, label)
             pt = torch.exp(-BCE_loss)
-            if alpha is not None:
-                alpha = alpha.to(pred.device)
-                alpha_t = alpha[label.argmax(dim=1)]
-                FL_loss = alpha_t * (1 - pt) ** gamma * BCE_loss
-            else:
-                FL_loss = (1 - pt) ** gamma * BCE_loss
+
+            alpha_t = 1
+            if label[:, 1] == 1:
+                alpha_t = alpha
+            FL_loss = alpha_t * (1 - pt) ** gamma * BCE_loss
+            if FL_loss.mean().isnan():
+                print(BCE_loss)
+
             return FL_loss.mean()
 
         def NllLoss(output, target) -> torch.Tensor:
@@ -249,9 +224,7 @@ class Trainer(object):
         if loss_fn == 'Fl':
             if type(output) == tuple:
                 output = output[0]
-            # if self.args.model_name == 'DGCNN_SPE':
-            #     output = torch.sigmoid(output)
-            return FocalLoss(output, target, gamma=0, alpha=torch.Tensor(self.args.alpha))
+            return FocalLoss(output, target, gamma=0, alpha=self.args.alpha)
         elif loss_fn == 'Bec':
             if type(output) == tuple:
                 output = output[0]
@@ -298,8 +271,8 @@ class Trainer(object):
                 f.write(f"Model Architecture: {self.model.__class__.__name__}\n")
                 f.write(f"Loss Function: {self.args.loss_type}\n")
                 f.write(f"Optimizer: {self.optimizer.__class__.__name__}\n")
-                f.write(
-                    f"lr_scheduler: {self.scheduler.__class__.__name__}, step_size={self.scheduler.step_size}, gamma={self.scheduler.gamma}\n")
+                # f.write(
+                #     f"lr_scheduler: {self.scheduler.__class__.__name__}, step_size={self.scheduler.step_size}, gamma={self.scheduler.gamma}\n")
                 f.write(f"Data_root: {self.args.train_root}, {self.args.test_root}\n")
                 f.write("Start training...\n")
         else:

@@ -1,0 +1,4 @@
+data/error_detect_data/test.7z filter=lfs diff=lfs merge=lfs -text
+data/error_detect_data/train.7z filter=lfs diff=lfs merge=lfs -text
+data/link_pred_data/test.7z filter=lfs diff=lfs merge=lfs -text
+data/link_pred_data/train.7z filter=lfs diff=lfs merge=lfs -text

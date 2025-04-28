@@ -34,7 +34,7 @@ def parse_args():
                         help='path to train dataset')
     parser.add_argument('--test_root', type=str, default=r'../data/link_pred_data/test', help='path to test dataset')
     parser.add_argument('--save_dir', type=str, default=r'../run/Repair', help='path to save')
-    parser.add_argument('--model_name', type=str, default='gae', choices=['tlp', 'gae', 'vgae'], help='model name')
+    parser.add_argument('--model_name', type=str, default='TLP', choices=['TLP', 'gae', 'vgae'], help='model name')
     args = parser.parse_args()
     return args
 
@@ -42,7 +42,7 @@ def parse_args():
 args = parse_args()
 
 model_dict = {
-    'tlp': TLP(),
+    'TLP': TLP(),
     'gae': GAE(),
     'vgae': VGAE()
 }
@@ -132,6 +132,7 @@ class Trainer(object):
         best_recall = 0
         best_f1 = 0
         best_epoch = 0
+        best_loss = 1e10
         best_model = self.model
         for epoch in range(self.args.epochs):
             self.model.train()
@@ -142,11 +143,11 @@ class Trainer(object):
                 self.model, valid_info = self.run_step(self.model, self.test_loader, epoch=epoch, mode='valid',
                                                        best_recall=best_recall,
                                                        best_precision=best_precision, best_f1=best_f1)
-            # train_metric = self.extract_metrics(train_info)
+            train_metric = self.extract_metrics(train_info)
             valid_metric = self.extract_metrics(valid_info)
             self._log_save(log=f"Train_{epoch + 1}: " + train_info)
             self._log_save(log=f"Valid_{epoch + 1}: " + valid_info + "\n")
-            if valid_metric['f1'] > best_f1:
+            if train_metric['loss'] < best_loss:
                 best_precision = valid_metric['precision']
                 best_recall = valid_metric['recall']
                 best_f1 = valid_metric['f1']
