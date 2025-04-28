@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/Neuron_Detect_Repair.iml" filepath="$PROJECT_DIR$/.idea/Neuron_Detect_Repair.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/NREDD.iml" filepath="$PROJECT_DIR$/.idea/NREDD.iml" />
     </modules>
   </component>
 </project>

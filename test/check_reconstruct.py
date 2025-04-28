@@ -41,7 +41,8 @@ def remove_point(swc_path, is_start=False):
         print("det_node_idx: ", det_idx)
         swc_block = np.delete(swc_block, det_idx, axis=0)
     swc_block = resample_swc_(swc_block)
-    saveswc(swc_name + '._remove.swc', swc_block)
+    save_remove_path = swc_path.replace('.swc', '._remove.swc')
+    saveswc(save_remove_path, swc_block)
     return swc_block
 
 
@@ -67,7 +68,7 @@ if __name__ == '__main__':
     print("Start error_repair...")
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_path', '-i', type=str,
-                        default=r'E:\Neure\18454_reconstruction\3\x16731_y39185_z3795.swc')
+                        default=r'..\data\test_data\x18044_y13021_z3647.swc')
     args = parser.parse_args()
 
     swc_block = loadswc(args.input_path)

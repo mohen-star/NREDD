@@ -138,8 +138,6 @@ def get_edge_for_coonect(swc):
     return adj_org, A
 
 
-
-
 def calculate_angle_cos(A, B, C):
     """
     计算由三个点 A、B、C 定义的角度 ∠BAC，其中 A 是顶点。
@@ -199,11 +197,11 @@ def Spherical_Patches_Extraction(img2, position, SP_N, SP_core, SP_step=1):
     return SP
 
 
-
-
 def change_coord(swc_path, mode='to_255'):
-    swc_name = os.path.basename(swc_path).split('.')[0]
+    swc_name = os.path.basename(swc_path).replace('.swc', '')
+    # print(swc_name)
     xyz = swc_name.split('_')
+    # print(xyz)
     x_cord = float(xyz[0].replace('x', ''))
     y_cord = float(xyz[1].replace('y', ''))
     z_cord = float(xyz[2].replace('z', ''))
@@ -220,7 +218,6 @@ def change_coord(swc_path, mode='to_255'):
             swc[:, 3] = swc[:, 3] + y_cord
             swc[:, 4] = swc[:, 4] + z_cord
     return swc
-
 
 
 def feature_normal_image(feature_tif):
@@ -266,8 +263,7 @@ def swc_progress(swc, swc_path, Ma=16, Mp=16, SP_N=10, SP_step=1):
     adj_org, adj = get_edge_for_coonect(swc)
     feature = swc[:, 2:5]
     feature = norm_feature_xyz(feature)
-    swc_name = swc_path.split('.')[0]
-    tif_path = swc_name + '.tif'
+    tif_path = swc_path.replace('.swc', '.tif')
     tif = read_tif(tif_path)
 
     feat_sp = create_SPfeature(swc, tif, Ma, Mp, SP_N, SP_step)
@@ -613,10 +609,10 @@ def get_swc_from_edges(adj, adj_org, swc, save_path, is_start=False):
     node_list = compute_trees(node_list)
 
     check_swc = build_nodelist(node_list)
-    repair_path = save_path.split('.')[0] + '._repair.swc'
+    repair_path = save_path.replace('.swc', '._repair.swc')
     saveswc(repair_path, check_swc)
-    check_swc = change_coord(repair_path, mode='to_origin')
-    saveswc(save_path, check_swc)
+    # check_swc = change_coord(repair_path, mode='to_origin')
+    # saveswc(save_path, check_swc)
 
 
 def bulid_subgraphs(swc, deeplayer=4):
@@ -702,8 +698,8 @@ def bulid_swc_feat(subtree):
 
 def deal_data_for_remove(swc_path, is_start=False):
     Ma, Mp, SP_N, SP_step = 16, 16, 10, 1
-    swc_name = swc_path.split('.')[0]
-    tif_path = swc_name + '.tif'
+    swc_name = os.path.basename(swc_path).replace('.swc', '')
+    tif_path = swc_path.replace('.swc', '.tif')
     tif = read_tif(tif_path)
 
     swc_block = change_coord(swc_path)

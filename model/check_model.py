@@ -1,7 +1,6 @@
 import math
 
 import torch
-from thop import profile
 from torch import nn
 import torch.nn.functional as F
 from torch.nn import Parameter
@@ -239,6 +238,8 @@ class AdvancedDropout(nn.Module):
         if self.training:
             if len(input.size()) == 3:
                 input1 = input.squeeze(dim=0)
+            else:
+                input1 = input
             # print('training')
             c, n = input1.size()
             # parameterized prior
@@ -335,7 +336,7 @@ class TED(nn.Module):
                  num_class=2,
                  hidden_size=64,
                  dropout=0.2,
-                 max_length=22,
+                 max_length=16,
                  bias=False,
                  device=[]):
         super(TED, self).__init__()

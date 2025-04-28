@@ -307,7 +307,7 @@ if __name__ == "__main__":
     args.is_test = False
     trainer = Trainer(args)
     if args.is_test:
-        ckpt_path = r'F:\Neruron_Repair\Neuron_Detect_Repair\run\Repair\gae-SPE-res\2025-03-10-22-15\checkpoint\epoch_46.pth'
+        ckpt_path = r'../test/check_point/TLP.pth'
         trainer.test(ckpt_path)
     else:
         trainer.train()

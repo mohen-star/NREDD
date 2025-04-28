@@ -3,5 +3,5 @@
   <component name="Black">
     <option name="sdkName" value="graphnn" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="graphnn" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="NREDD" project-jdk-type="Python SDK" />
 </project>

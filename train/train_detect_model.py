@@ -299,4 +299,4 @@ if __name__ == "__main__":
     trainer = Trainer(args)
     trainer.train()
 
-    # trainer.test(r'F:\Neruron_Repair\Neuron_Detect_Repair_upload\test\check_point\TED_best.pkl')
+    # trainer.test(r'../test/check_point/TED.pkl')
